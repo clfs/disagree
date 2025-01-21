@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"math"
 	"math/rand/v2"
 	"os"
 	"time"
@@ -40,7 +41,7 @@ func main() {
 	}
 
 	var (
-		worstPerDiff  float64
+		worstDisagree float64
 		worstEval1    int
 		worstEval2    int
 		worstPosition string
@@ -59,15 +60,21 @@ func main() {
 				log.Fatalf("engine 2: %v", err)
 			}
 
-			pd := perDiff(eval1, eval2)
+			d := Disagree(eval1, eval2)
+
+			if d <= 0 {
+				fmt.Printf("%d != %d\t%s\n", eval1, eval2, game.Position().String())
+			} else {
+				fmt.Printf("⭐️%d != %d\t%s\n", eval1, eval2, game.Position().String())
+			}
 
 			// TODO(clfs): Remove temporary non-zero check.
-			if eval1 != 0 && eval2 != 0 && pd > worstPerDiff {
-				worstPerDiff = pd
+			if d > worstDisagree {
+				worstDisagree = d
 				worstEval1 = eval1
 				worstEval2 = eval2
 				worstPosition = game.Position().String()
-				fmt.Printf("%d != %d\t%s\n", worstEval1, worstEval2, worstPosition)
+				fmt.Printf("❤️%d != %d\t%s\n", worstEval1, worstEval2, worstPosition)
 			}
 
 			moves := game.ValidMoves()
@@ -75,6 +82,10 @@ func main() {
 			game.Move(move)
 		}
 	}
+}
+
+func Disagree(x, y int) float64 {
+	return -(float64(x) * float64(y))
 }
 
 func perDiff(x, y int) float64 {
@@ -171,9 +182,15 @@ func (e *Engine) Ready() error {
 
 func (e *Engine) Eval(g *chess.Game) (int, error) {
 	cmdPos := uci.CmdPosition{Position: g.Position()}
-	cmdGo := uci.CmdGo{MoveTime: 50 * time.Millisecond}
+	cmdGo := uci.CmdGo{MoveTime: 500 * time.Millisecond}
 	if err := e.e.Run(cmdPos, cmdGo); err != nil {
 		return 0, fmt.Errorf("eval: %v", err)
+	}
+	if e.e.SearchResults().Info.Score.Mate < 0 {
+		return math.MinInt, nil
+	}
+	if e.e.SearchResults().Info.Score.Mate > 0 {
+		return math.MaxInt, nil
 	}
 	return e.e.SearchResults().Info.Score.CP, nil
 }
